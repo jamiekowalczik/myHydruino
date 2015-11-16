@@ -79,17 +79,21 @@ int relay4Val = 0;
 int relay4OldVal = 0;
 
 byte xeeDHTType = 0, xeeLastDHTType = 0;
-byte addrDHTType = 20;
+byte addrDHTType = 80;
 char charRoomTemp[20];
 char charRoomHumidity[20];
 byte bRoomTemp, bOldRoomTemp, bRoomHumidity, bOldRoomHumidity;
 float fRoomTemp, fRoomHumidity;
 byte curSonarVal;
+byte lowSetPoint, lastLowSetPoint, highSetPoint, lastHighSetPoint;
+byte xeeLowSetPoint, xeeHighSetPoint, addrLowSetPoint = 60, addrHighSetPoint = 70;
 
 genericKeyboard mykb(read_keyboard);
 //alternative to previous but now we can input from Serial too...
-Stream* in2[]={&mykb,&Serial};
-chainStream<2> allIn(in2);
+//Stream* in2[]={&mykb,&Serial};
+//chainStream<2> allIn(in2);
+Stream* in2[]={&mykb};
+chainStream<1> allIn(in2);
 
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
 menuLCD menu_lcd(lcd,20,4);//menu output device
@@ -113,7 +117,7 @@ Thread t_readSonar = Thread();
 
 ////// MENU
 
-TOGGLE(xeeDHTType,dhtTypes,"DHT Types: ",
+TOGGLE(DHTTYPE,dhtTypes,"DHT Types: ",
     VALUE("DHT11",0, toggleDHTType),
     VALUE("DHT22",1, toggleDHTType)
 );
@@ -176,7 +180,9 @@ MENU(setDateTimeMenu,"Set Date/Time",
 MENU(setupMenu,"Setup",
    FIELD(ConfigID,"Unit ID","",0,99,-10,-1,updateConfigID),
    SUBMENU(setDateTimeMenu),
-   SUBMENU(dhtTypes)
+   SUBMENU(dhtTypes),
+   FIELD(highSetPoint,"High Set Pt(cm)","",0,99,-10,-1,updateHighSetPoint),
+   FIELD(lowSetPoint,"Low Set Pt(cm)","",0,99,-10,-1,updateLowSetPoint)
 );
   
 MENU(mainMenu,"Main",
@@ -235,9 +241,26 @@ void toggleRelay4(){
   }
 }
 
+void toggleDHTType() {
+  if (DHTTYPE != xeeLastDHTType) {
+    saveDHTType(DHTTYPE);
+    xeeLastDHTType = DHTTYPE;
+  }
+}
+
 void saveConfigID(byte i) {
   xeeConfigID = byte(i);
   EEPROM.write(addrConfigID, xeeConfigID);
+}
+
+void saveHighSetPoint(byte i) {
+  xeeHighSetPoint = byte(i);
+  EEPROM.write(addrHighSetPoint, xeeHighSetPoint);
+}
+
+void saveLowSetPoint(byte i) {
+  xeeLowSetPoint = byte(i);
+  EEPROM.write(addrLowSetPoint, xeeLowSetPoint);
 }
 
 void saveConfigRelay1(byte i) {
@@ -307,9 +330,13 @@ void readConfig() {
      digitalWrite(pinRelay4, HIGH);
   }
 
-  if(xeeDHTType == 0){
-    xeeLastDHTType = 0;
-  }
+  xeeLowSetPoint = EEPROM.read(addrLowSetPoint);
+  lowSetPoint = byte(xeeLowSetPoint);
+
+  xeeHighSetPoint = EEPROM.read(addrHighSetPoint);
+  highSetPoint = byte(xeeHighSetPoint);
+
+  DHTTYPE = EEPROM.read(addrDHTType);
 }
 
 void updateConfigID() {
@@ -319,10 +346,19 @@ void updateConfigID() {
   }
 }
 
-void toggleDHTType() {
-  if (xeeDHTType != xeeLastDHTType) {
-    saveDHTType(xeeDHTType);
-    xeeLastDHTType = xeeDHTType;
+void updateHighSetPoint() {
+  if (highSetPoint != lastHighSetPoint) {
+    saveHighSetPoint(highSetPoint);
+    lastHighSetPoint = highSetPoint;
+  }
+}
+
+void updateLowSetPoint() {
+  Serial.println("updating low set point");
+  if (lowSetPoint != lastLowSetPoint) {
+    Serial.println("Saving new low set point");
+    saveLowSetPoint(lowSetPoint);
+    lastLowSetPoint = lowSetPoint;
   }
 }
 
@@ -350,6 +386,8 @@ void emptyCmd() {
   int curStatus = 0;
   int dots = 0;
   do{
+    lcd.setCursor(0,0);
+    lcd.print(F("Emptying Reservoir  "));
     if(curStatus == 0){
       UpdateEmptyStatus(curStatus);
       curStatus = 1;
@@ -409,6 +447,8 @@ void fillCmd() {
     
   byte curStatus = 0, dots = 0;
   do{
+    lcd.setCursor(0,0);
+    lcd.print(F("Filling Reservoir   "));
     if(curStatus == 0){
       UpdateFillStatus(curStatus);
       curStatus = 1;
@@ -530,44 +570,52 @@ void performAction(unsigned short rawMessage){
    //deviceid = ((input_number/10)%10);
    //piid = ((input_number/100)%10);
    
-   if(rawMessage == 100){
+   if(rawMessage == 200){
     callback=100;
     sendCallback(callback);
     fillCmd();
-   }else if(rawMessage == 101){
+   }else if(rawMessage == 201){
     callback=101;
     sendCallback(callback);
     emptyCmd();
    }else if(rawMessage == 83){
+     relay1Val = 1;
      saveConfigRelay1(1);
      digitalWrite(pinRelay1, HIGH);
      sendCallback(0);
    }else if(rawMessage == 84){
+     relay2Val = 1;
      saveConfigRelay2(1);
      digitalWrite(pinRelay2, HIGH);
      sendCallback(0);
    }else if(rawMessage == 85){
-     saveConfigRelay2(1);
+     relay3Val = 1;
+     saveConfigRelay3(1);
      digitalWrite(pinRelay3, HIGH);
      sendCallback(0);
    }else if(rawMessage == 86){
-     saveConfigRelay2(1);
+     relay4Val = 1;
+     saveConfigRelay4(1);
      digitalWrite(pinRelay4, HIGH);
      sendCallback(0);
    }else if(rawMessage == 87){
+     relay1Val = 0;
      saveConfigRelay1(0);
      digitalWrite(pinRelay1, LOW);
      sendCallback(0);
    }else if(rawMessage == 88){
+     relay2Val = 0;
      saveConfigRelay2(0);
      digitalWrite(pinRelay2, LOW);
      sendCallback(0);
    }else if(rawMessage == 89){
-     saveConfigRelay2(0);
+     relay3Val = 0;
+     saveConfigRelay3(0);
      digitalWrite(pinRelay3, LOW);
      sendCallback(0);
    }else if(rawMessage == 90){
-     saveConfigRelay2(0);
+     relay4Val = 0;
+     saveConfigRelay4(0);
      digitalWrite(pinRelay4, LOW);
      sendCallback(0);
    }else if(rawMessage == 91){
@@ -674,6 +722,9 @@ void readWaterSensor1() {
     ISHIGH1 = 0;
   }
   //if(lastWaterSensor1DepthVal != curWaterSensor1DepthVal) {
+    if(lastWaterSensor1DepthVal == "High" && curWaterSensor1DepthVal != "High"){
+      readWaterSonarSensor();
+    }
     if(curWaterSensor1DepthVal == "High"){
       String strWaterLevelPre = "Water Level: ";
       String strWaterLevel = String(curWaterSensor1DepthVal);
@@ -693,15 +744,15 @@ char charWaterSonarSensorLevel[20];
 void readWaterSonarSensor(){
   int curVal = sonar.ping_cm();
   curSonarVal = curVal;
-  Serial.print("Water Level Sonar Sensor: ");
-  Serial.print(curVal);
-  Serial.println("cm");
+  ///Serial.print("Water Level Sonar Sensor: ");
+  ///Serial.print(curVal);
+  ///Serial.println("cm");
   curWaterSonarSensorDepthVal = (String)curVal;
-  if(curVal < 5){
+  if(curVal < highSetPoint){
     ISHIGH1 = 1;
-  }else if(curVal >10){
+  }else if(curVal > lowSetPoint){
     ISHIGH1 = 0;
-  }else if(curVal < 1 || curVal > 150){
+  }else if(curVal < 2 || curVal > 150){
     ISHIGH1 = 2;
   }
   if(lastWaterSonarSensorDepthVal != curWaterSonarSensorDepthVal) {
@@ -723,7 +774,11 @@ double Fahrenheit(double celsius){
 
 void readRoomTemperatureAndHumidity() {
   //float fRoomHumidity = dht.readHumidity();
-  DHT.read11(3);
+  if(DHTTYPE == 0){
+    DHT.read11(DHTPIN);
+  }else if(DHTTYPE == 1){
+    DHT.read22(DHTPIN);
+  }
   float fRoomHumidity = DHT.humidity;
   //float fRoomTemp = dht.readTemperature(true);
   float cRoomTemp = DHT.temperature;
@@ -925,4 +980,3 @@ void loop() {
     sPrevMenu = sCurMenu;
   }
 }
-
