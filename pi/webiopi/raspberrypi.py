@@ -34,6 +34,7 @@ def destroy():
 
 @webiopi.macro
 def reboot(t=1):
+    #Reboot RasPi
     Timer(int(t)*60,os.system("sudo reboot")).start()
     return "The system is going DOWN for reboot in %d minute" % t
 
