@@ -44,14 +44,10 @@
 #define MAX_DISTANCE 200 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
 
 byte DHTTYPE;
-
-//Variables containing data we want to keep persistent
 byte lastConfigID;
 byte ConfigID;
-
 char charWaterTemp[20];
 byte bWaterTemp, bOldWaterTemp;
-
 byte addrConfigID = 10;
 byte addrRelay1 = 20;
 byte pinRelay1 = 5;
@@ -61,17 +57,14 @@ byte pinRelay2 = 2;
 int relay2Val = 0;
 int relay2OldVal = 0;
 byte addrRelay2 = 30;
-
 byte addrRelay3 = 40;
 byte pinRelay3 = 6;
 int relay3Val = 0;
 int relay3OldVal = 0;
-
 byte addrRelay4 = 50;
 byte pinRelay4 = 7;
 int relay4Val = 0;
 int relay4OldVal = 0;
-
 byte xeeLastDHTType;
 byte addrDHTType = 55;
 char charRoomTemp[20];
