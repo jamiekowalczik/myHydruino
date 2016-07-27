@@ -37,10 +37,14 @@ metadata {
         capability "Sensor"
         capability "Actuator"
         
-        attribute "temperature", "string"
-        attribute "cpuPercentage", "string"
-        attribute "memory", "string"
-        attribute "diskUsage", "string"
+        attribute "depth", "string"
+        attribute "wtemp", "string"
+        attribute "atemp", "string"
+        attribute "ahumid", "string"
+        attribute "relay1", "string"
+        attribute "relay2", "string"
+        attribute "relay3", "string"
+        attribute "relay4", "string"
         
         command "restart"
         command "NF24ON" 
@@ -67,18 +71,6 @@ metadata {
             state "on" , label: 'On', backgroundColor: "#79b821", nextState: "off", icon: "st.secondary.refresh"
         }
 
-		valueTile("temperature", "device.temperature", width: 1, height: 1) {
-            state "temperature", label:'Water \n${currentValue}° F', unit: "F",
-            backgroundColors:[
-                [value: 77, color: "#153591"],
-                [value: 95, color: "#1e9cbb"],
-                [value: 116, color: "#90d2a7"],
-                [value: 138, color: "#44b621"],
-                [value: 152, color: "#f1d801"],
-                [value: 168, color: "#d04e00"],
-                [value: 170, color: "#bc2323"]
-            ]
-        }
         standardTile("switch", "device.switch", width: 1, height: 1, canChangeIcon: true) {
 			state "off", label: 'Off', action: "switch.on", icon: "st.Lighting.light3", backgroundColor: "#ffffff", nextState: "on"
 			state "on", label: 'On', action: "switch.off", icon: "st.Lighting.light3", backgroundColor: "#79b821", nextState: "off"
@@ -87,8 +79,8 @@ metadata {
 			state "off", label: 'Off', icon: "st.Electronics.electronics18", backgroundColor: "#ffffff", nextState: "on"
 			state "on", label: 'On', icon: "st.Electronics.electronics18", backgroundColor: "#79b821", nextState: "off"
 		}
-        valueTile("cpuPercentage", "device.cpuPercentage", inactiveLabel: false) {
-        	state "default", label:'Humidity \n${currentValue}%', unit:"Percentage",
+        valueTile("depth", "device.depth", inactiveLabel: false) {
+        	state "default", label:'Depth \n${currentValue}', unit:"cm",
             backgroundColors:[
                 [value: 31, color: "#153591"],
                 [value: 44, color: "#1e9cbb"],
@@ -99,8 +91,8 @@ metadata {
                 [value: 96, color: "#bc2323"]
             ]
         }
-        valueTile("memory", "device.memory", width: 1, height: 1) {
-        	state "default", label:'Room \n${currentValue}° F', unit:"F",
+        valueTile("wtemp", "device.wtemp", width: 1, height: 1) {
+        	state "default", label:'Water \n${currentValue}° F', unit:"F",
             backgroundColors:[
                 [value: 353, color: "#153591"],
                 [value: 287, color: "#1e9cbb"],
@@ -111,8 +103,8 @@ metadata {
                 [value: 20, color: "#bc2323"]
             ]
         }
-        valueTile("diskUsage", "device.diskUsage", width: 1, height: 1) {
-        	state "default", label:'Water Level \n${currentValue}cm', unit:"cm",
+        valueTile("atemp", "device.atemp", width: 1, height: 1) {
+        	state "default", label:'Air \n${currentValue}° F', unit:"F",
             backgroundColors:[
                 [value: 12, color: "#153591"],
                 [value: 10, color: "#1e9cbb"],
@@ -122,6 +114,19 @@ metadata {
                 [value: 0, color: "#153591"]
             ]
         }
+        
+        valueTile("ahumid", "device.ahumid", width: 1, height: 1) {
+        	state "default", label:'Humid \n${currentValue}%', unit:"Percentage",
+            backgroundColors:[
+                [value: 12, color: "#153591"],
+                [value: 10, color: "#1e9cbb"],
+                [value: 8, color: "#44b621"],
+                [value: 6, color: "#f1d801"],
+                [value: 4, color: "#d04e00"],
+                [value: 0, color: "#153591"]
+            ]
+        }
+        
         standardTile("restart", "device.restart", inactiveLabel: false, decoration: "flat") {
         	state "default", action:"restart", label: "Restart", displayName: "Restart"
         }
@@ -129,7 +134,7 @@ metadata {
         	state "default", action:"refresh.refresh", icon: "st.secondary.refresh"
         }
         main "switch"
-        details(["switch", "temperature",  "diskUsage", "cpuPercentage", "memory", "refresh", "restart"])
+        details(["depth",  "wtemp", "atemp", "ahumid", "refresh", "restart"])
     }
 }
 
@@ -155,21 +160,21 @@ def parse(String description) {
         sendEvent(name: "switch", value: result.light_status)
     }
     
-    if (result.containsKey("cpu_temp")) {
-    	sendEvent(name: "temperature", value: result.cpu_temp)
+    if (result.containsKey("depth")) {
+    	sendEvent(name: "depth", value: result.depth)
     }
     
-    if (result.containsKey("cpu_perc")) {
-        sendEvent(name: "cpuPercentage", value: result.cpu_perc)
+    if (result.containsKey("wtemp")) {
+        sendEvent(name: "wtemp", value: result.wtemp)
     }
     
-    if (result.containsKey("mem_avail")) {
-    	log.debug "mem_avail: ${result.mem_avail}"
-        sendEvent(name: "memory", value: result.mem_avail)
+    if (result.containsKey("atemp")) {
+    	log.debug "atemp: ${result.atemp}"
+        sendEvent(name: "atemp", value: result.atemp)
     }
-    if (result.containsKey("disk_usage")) {
-    	log.debug "disk_usage: ${result.disk_usage}"
-        sendEvent(name: "diskUsage", value: result.disk_usage)
+    if (result.containsKey("ahumid")) {
+    	log.debug "ahumid: ${result.ahumid}"
+        sendEvent(name: "ahumid", value: result.ahumid)
     }
   
 }
@@ -204,8 +209,13 @@ def on(){
 
 // Get CPU percentage reading
 private getRPiData() {
-	def uri = "/macros/getData"
+	def uri = "/macros/getAllData"
     postAction(uri)
+}
+
+private getRPiData2() {
+   def uri = "/macros/getData2"
+   postAction(uri)
 }
 
 def NF24ON() {NF24Action(10,1)}
