@@ -1,16 +1,20 @@
+
 //Import this phenominal library
 //#include <EnableInterrupt.h>
 #include <SPI.h>
-#include "nRF24L01.h"
-#include "RF24.h"
+#include <RHReliableDatagram.h>
+#include <RH_NRF24.h>
 #include "printf.h"
 #include <stdio.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <HardwareSerial.h>
 #include <Wire.h> 
 #include <LiquidCrystal_I2C.h>
 #include <menu.h>
 #include <genericKeyboard.h>
+#include <quadEncoder.h>
+#include <keyStream.h>
 #include <chainStream.h>
 #include <menuLCDs.h>
 #include <menuFields.h>
@@ -21,6 +25,12 @@
 #include <Thread.h>
 #include <EEPROMex.h>
 #include <NewPing.h>
+#include <RunningMedian.h>
+
+
+#define CLIENT_ADDRESS 1
+#define SERVER_ADDRESS 2
+RH_NRF24 nrf24(8, 53);
 
 // Pin Definitions
 #define pinEnter A3
@@ -80,12 +90,60 @@ byte bCurMonth, bOldMonth, bCurDay, bOldDay, bCurHour, bOldHour, bCurMinute, bOl
 int iCurYear, iOldYear;
 String strTime;
 
-genericKeyboard mykb(read_keyboard);
+int old_button = 0;
+
+//int read_keyboard() {
+//  int button, button2, pressed_button;  
+//  button = getButton();
+//  if (button != old_button) {
+//      delay(50);        // debounce
+//      button2 = getButton();
+//
+//      if (button == button2) {
+//         old_button = button;
+//         pressed_button = button;
+//         if(button != 0) {
+//           //Serial.println(button); 
+//           if(button == 1) return btnLEFT;
+//           if(button == 2) return btnUP;
+//           if(button == 3) return btnDOWN;
+//           if(button == 4) return btnRIGHT;
+//           if(button == 5) return btnENTER;
+//         }
+//      }
+//  }else{
+//    return btnNONE;
+//  }
+//}
+
+////genericKeyboard mykb(read_keyboard);
 //alternative to previous but now we can input from Serial too...
 //Stream* in2[]={&mykb,&Serial};
 //chainStream<2> allIn(in2);
-Stream* in2[]={&mykb};
-chainStream<1> allIn(in2);
+////Stream* in2[]={&mykb};
+////chainStream<1> allIn(in2);
+
+
+#define encA A9
+#define encB A10
+//this encoder has a button here
+#define encBtn A8
+
+//the quadEncoder
+quadEncoder quadEncoder(encA,encB);//simple quad encoder driver
+quadEncoderStream enc(quadEncoder,5);// simple quad encoder fake Stream
+
+//a keyboard with only one key :D, this is the encoder button
+keyMap encBtn_map[]={{-encBtn,menu::enterCode}};//negative pin numbers means we have a pull-up, this is on when low
+keyLook<1> encButton(encBtn_map);
+
+//multiple inputs allow conjugation of the quadEncoder with a single key keyboard that is the quadEncoder button
+//Stream* in[]={&enc,&encButton};
+//chainStream<2> quadEncoder_button(in);
+
+//alternative to previous but now we can input from Serial too...
+Stream* in3[]={&enc, &encButton, &Serial};
+chainStream<3> allIn(in3);
 
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
 menuLCD menu_lcd(lcd,20,4);//menu output device
@@ -176,7 +234,7 @@ MENU(mainMenu,"Main",
 );
 
 void toggleRelay1(){
-  Serial.println(relay1Val);
+  //Serial.println(relay1Val);
   if(relay1Val == 0){
     relay1OldVal = 0;
     saveEEPROMVAR(addrRelay1,relay1OldVal);
@@ -228,7 +286,7 @@ void toggleDHTType() {
   if (DHTTYPE != xeeLastDHTType) {
     saveEEPROMVAR(addrDHTType,DHTTYPE);
     xeeLastDHTType = DHTTYPE;
-    Serial.println(xeeLastDHTType);
+    //Serial.println(xeeLastDHTType);
   }
 }
 
@@ -298,7 +356,7 @@ void readConfig() {
   highSetPoint = EEPROM.read(addrHighSetPoint);
 
   DHTTYPE = EEPROM.read(addrDHTType);
-  Serial.println(DHTTYPE);
+  //Serial.println(DHTTYPE);
 }
 
 int ISHIGH1 = 0;
@@ -306,7 +364,7 @@ int ISHIGH1 = 0;
 void emptyCmd() {
   lcd.clear();
   delay(1000);
-  readWaterSonarSensor();
+  //readWaterSonarSensor();
   if(ISHIGH1 < 1){
     lcd.clear();
     lcd.setCursor(0,0);
@@ -429,51 +487,11 @@ void UpdateFillStatus(byte iStatus){
 void updateRTC(){
   setTime(bCurHour,bCurMinute,0,bCurDay,bCurMonth,iCurYear);
   rtc.adjust(DateTime(now()));
-  showTime();
+  // showTime();
 }
-
-RF24 radio(40,53);
-// Radio pipe addresses for the 2 nodes to communicate.
-const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };
 
 void sendCallback(unsigned short callback){
-   // First, stop listening so we can talk
-   radio.stopListening();
 
-   Serial.println(callback);
-   
-   // Send the final one back.
-   radio.write( &callback, sizeof(unsigned short) );
-   printf("Sent response.\n\r");
-
-   // Now, resume listening so we catch the next packets.
-   radio.startListening();
-}
-
-int old_button = 0;
-
-int read_keyboard() {
-  int button, button2, pressed_button;  
-  button = getButton();
-  if (button != old_button) {
-      delay(50);        // debounce
-      button2 = getButton();
-
-      if (button == button2) {
-         old_button = button;
-         pressed_button = button;
-         if(button != 0) {
-           //Serial.println(button); 
-           if(button == 1) return btnLEFT;
-           if(button == 2) return btnUP;
-           if(button == 3) return btnDOWN;
-           if(button == 4) return btnRIGHT;
-           if(button == 5) return btnENTER;
-         }
-      }
-  }else{
-    return btnNONE;
-  }
 }
 
 int getButton() {
@@ -553,32 +571,27 @@ void performAction(unsigned short rawMessage){
      sendCallback(0);
    }else if(rawMessage == 91){
     // WATER TEMP //
-    radio.stopListening();
     readSensorTemperature();
     readRoomTemperatureAndHumidity();
     callback=(short)bWaterTemp;
     sendCallback(callback);
    }else if(rawMessage == 92){
     // ROOM TEMP //
-    radio.stopListening();
     readRoomTemperatureAndHumidity();
     callback=(short)bRoomTemp;
     sendCallback(callback);
    }else if(rawMessage == 93){
     // ROOM HUMIDITY //
-    radio.stopListening();
     readRoomTemperatureAndHumidity();
     callback=(short)bRoomHumidity;
     sendCallback(callback);
    }else if(rawMessage == 94){
     // WATER LEVEL 1//
-    radio.stopListening();
     readWaterSensor1();
     callback=(short)ISHIGH1;
     sendCallback(callback);
    }else if(rawMessage == 95){
     // WATER LEVEL 2//
-    radio.stopListening();
     readWaterSonarSensor();
     callback=(short)curSonarVal;
     sendCallback(callback);
@@ -588,24 +601,56 @@ void performAction(unsigned short rawMessage){
    }
 }
 
-void loopRadio() {
-   // if there is data ready
-   if ( radio.available() ){
-      // Dump the payloads until we've gotten everything
-      unsigned short message;
-      bool done;
-      // char * new;
-      unsigned short rawMessage; 
-      done = false;
-      while ( radio.available() ){
-        // Fetch the payload, and see if this was the last one.
-        radio.read( &rawMessage, sizeof(unsigned long) );
-        // Spew it
-        Serial.println("Message"+(String)rawMessage); 
-        performAction(rawMessage);
-        delay(10);
+void loopRadioRH(){
+  if (nrf24.available()){
+    // Should be a message for us now   
+    uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
+    uint8_t len = sizeof(buf);
+    memset(buf, 0, RH_NRF24_MAX_MESSAGE_LEN);
+    if (nrf24.recv(buf, &len)){
+      //NRF24::printBuffer("request: ", buf, len);
+      Serial.println((char*)buf);
+
+      char* ret = (char*)buf;
+
+      uint8_t data[] = "And hello back to you";
+      if(strcmp(ret,"allData") == 0){
+        readSensorTemperature();
+        readRoomTemperatureAndHumidity();
+        readWaterSensor1();
+        readWaterSonarSensor();
+        
+        String strJoinedString;
+        strJoinedString = (String)bWaterTemp+"|";
+        strJoinedString += (String)bRoomTemp+"|";
+        strJoinedString += (String)bRoomHumidity+"|";
+        strJoinedString += (String)ISHIGH1+"|";
+        strJoinedString += (String)curSonarVal;
+        Serial.println(strJoinedString);
+        byte str_len = strJoinedString.length() + 1;
+        char reply[RH_NRF24_MAX_MESSAGE_LEN];
+        reply[str_len];
+        strJoinedString.toCharArray(reply, str_len);
+        strcpy((char*)data,(char*)reply);
+        
+        Serial.print("Water Temp: ");
+        Serial.println((short)bWaterTemp);
+        Serial.print("Room Temp: ");
+        Serial.println((short)bRoomTemp);
+        Serial.print("Room Humidity: ");
+        Serial.println((short)bRoomHumidity);
+        Serial.print("Emergency Water Level Sensor: ");
+        Serial.println((short)ISHIGH1);
+        Serial.print("Water Level Sensor: ");
+        Serial.println((short)curSonarVal);
       }
-   }
+
+      delay(500);
+      // Send a reply
+      nrf24.send(data, sizeof(data));
+      nrf24.waitPacketSent();
+    }
+  }
 }
 
 byte WATERLEVEL=0, WATERTEMP=1, AIRTEMP=2, AIRHUMIDITY=3;
@@ -668,10 +713,26 @@ void readWaterSensor1() {
   //}
 }
 
+int rangeFinder(){
+  //Create an instance of the RunningMedian class with the number of samples to use
+  RunningMedian samples = RunningMedian(7);
+  
+  //Get the 7 samples
+  for(int i= 0; i<5; i++){
+     delay(50);
+     int pingVal = sonar.ping_cm();
+      
+     samples.add(pingVal);
+   }   
+   //Return the median value
+   return samples.getMedian();  
+}
+
 String curWaterSonarSensorDepthVal, lastWaterSonarSensorDepthVal;
 char charWaterSonarSensorLevel[20];
 void readWaterSonarSensor(){
-  int curVal = sonar.ping_cm();
+  //int curVal = sonar.ping_cm();
+  int curVal = rangeFinder();
   curSonarVal = curVal;
   curWaterSonarSensorDepthVal = (String)curVal;
   if(curVal < highSetPoint){
@@ -831,18 +892,31 @@ void setup() {
   readConfig();
   
   Wire.begin();
+  
   lcd.begin(20,4);
   lcd.print("Ok"); 
 
   sensors.begin();
+  quadEncoder.begin();
+    
+  pinMode(encBtn,INPUT);
+  digitalWrite(encBtn,1);
   
   rtc.begin(); // Start the RTC library code
 
   t_LCDUpdate.onRun(updateLCD);
   t_LCDUpdate.setInterval(50);
 
-  t_readRF24.onRun(loopRadio);
-  t_readRF24.setInterval(50);
+  //if (!manager.init()){ Serial.println("init failed"); }
+  if (!nrf24.init())
+   Serial.println("init failed");
+  // Defaults after init are 2.402 GHz (channel 2), 2Mbps, 0dBm
+  if (!nrf24.setChannel(2))
+    Serial.println("setChannel failed");
+  if (!nrf24.setRF(RH_NRF24::DataRate2Mbps, RH_NRF24::TransmitPower0dBm))
+    Serial.println("setRF failed");    
+  t_readRF24.onRun(loopRadioRH);
+  t_readRF24.setInterval(100);
   
   t_WaterSensorTemp.onRun(readSensorTemperature);
   t_WaterSensorTemp.setInterval(3000);
@@ -858,19 +932,11 @@ void setup() {
 
   t_readSonar.onRun(readWaterSonarSensor);
   t_readSonar.setInterval(1000);
-  
-  radio.begin();
-  radio.setAutoAck(1); // Ensure autoACK is enabled
-  radio.setRetries(15,15);
-
-  radio.openWritingPipe(pipes[1]);
-  radio.openReadingPipe(1,pipes[0]);
-  radio.startListening();
-  radio.printDetails();
 }
 
 void updateLCD(){
   mainMenu.poll(menu_lcd,allIn);
+  //Serial.println("Updating menu");
 }
 
 void loop() {
